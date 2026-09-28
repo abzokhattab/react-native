@@ -255,6 +255,16 @@ TEST_F(ReactInstanceTest, testBridgelessFlagIsSet) {
   EXPECT_EQ(val.getBool(), true);
 }
 
+TEST_F(ReactInstanceTest, testGlobalEvalWithSourceUrlIsInstalled) {
+  auto before = tryEval("typeof globalEvalWithSourceUrl === 'function'", "false");
+  EXPECT_EQ(before.getBool(), false);
+  initializeRuntimeWithScript("");
+  auto isFn = eval("typeof globalEvalWithSourceUrl === 'function'");
+  EXPECT_EQ(isFn.getBool(), true);
+  auto result = eval("globalEvalWithSourceUrl('1 + 2')");
+  EXPECT_EQ(result.getNumber(), 3);
+}
+
 TEST_F(ReactInstanceTest, testProfilingFlag) {
   auto valBefore = tryEval("__RCTProfileIsProfiling === true", "false");
   EXPECT_EQ(valBefore.getBool(), false);
