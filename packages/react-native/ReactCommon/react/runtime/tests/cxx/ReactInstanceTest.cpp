@@ -265,6 +265,23 @@ TEST_F(ReactInstanceTest, testGlobalEvalWithSourceUrlIsInstalled) {
   EXPECT_EQ(result.getNumber(), 3);
 }
 
+TEST_F(ReactInstanceTest, testEvalVersusGlobalEvalWithSourceUrl) {
+  initializeRuntimeWithScript("");
+
+  eval("global.__fromHelper = 0; global.__fromEval = 0; global.__evalError = '';");
+  eval("globalEvalWithSourceUrl('global.__fromHelper = 1', 'chunk.js')");
+  EXPECT_EQ(eval("global.__fromHelper").getNumber(), 1);
+
+  auto evalOk = eval(
+      "(function(){ try { eval('global.__fromEval = 1'); return true; } catch (e) { global.__evalError = String(e); return false; } })()");
+  if (evalOk.getBool()) {
+    EXPECT_EQ(eval("global.__fromEval").getNumber(), 1);
+  } else {
+    auto err = eval("global.__evalError");
+    EXPECT_TRUE(err.isString());
+  }
+}
+
 TEST_F(ReactInstanceTest, testProfilingFlag) {
   auto valBefore = tryEval("__RCTProfileIsProfiling === true", "false");
   EXPECT_EQ(valBefore.getBool(), false);
