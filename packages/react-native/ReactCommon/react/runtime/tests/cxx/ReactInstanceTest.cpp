@@ -118,9 +118,13 @@ class ReactInstanceTest : public ::testing::Test {
  protected:
   ReactInstanceTest() = default;
 
+  virtual ::hermes::vm::RuntimeConfig makeRuntimeConfig() {
+    return ::hermes::vm::RuntimeConfig();
+  }
+
   void SetUp() override {
-    auto runtime =
-        std::make_unique<JSIRuntimeHolder>(hermes::makeHermesRuntime());
+    auto runtime = std::make_unique<JSIRuntimeHolder>(
+        hermes::makeHermesRuntime(makeRuntimeConfig()));
     runtime_ = &runtime->getRuntime();
     messageQueueThread_ = std::make_shared<MockMessageQueueThread>();
     auto mockRegistry = std::make_unique<MockTimerRegistry>();
@@ -256,7 +260,8 @@ TEST_F(ReactInstanceTest, testBridgelessFlagIsSet) {
 }
 
 TEST_F(ReactInstanceTest, testGlobalEvalWithSourceUrlIsInstalled) {
-  auto before = tryEval("typeof globalEvalWithSourceUrl === 'function'", "false");
+  auto before =
+      tryEval("typeof globalEvalWithSourceUrl === 'function'", "false");
   EXPECT_EQ(before.getBool(), false);
   initializeRuntimeWithScript("");
   auto isFn = eval("typeof globalEvalWithSourceUrl === 'function'");
@@ -265,21 +270,40 @@ TEST_F(ReactInstanceTest, testGlobalEvalWithSourceUrlIsInstalled) {
   EXPECT_EQ(result.getNumber(), 3);
 }
 
-TEST_F(ReactInstanceTest, testEvalVersusGlobalEvalWithSourceUrl) {
+TEST_F(
+    ReactInstanceTest,
+    testGlobalEvalWithSourceUrlMatchesEvalWhenEvalIsEnabled) {
   initializeRuntimeWithScript("");
 
-  eval("global.__fromHelper = 0; global.__fromEval = 0; global.__evalError = '';");
-  eval("globalEvalWithSourceUrl('global.__fromHelper = 1', 'chunk.js')");
-  EXPECT_EQ(eval("global.__fromHelper").getNumber(), 1);
+  EXPECT_EQ(eval("eval('1 + 2')").getNumber(), 3);
+  EXPECT_EQ(
+      eval("globalEvalWithSourceUrl('1 + 2', 'chunk.js')").getNumber(), 3);
+}
 
-  auto evalOk = eval(
-      "(function(){ try { eval('global.__fromEval = 1'); return true; } catch (e) { global.__evalError = String(e); return false; } })()");
-  if (evalOk.getBool()) {
-    EXPECT_EQ(eval("global.__fromEval").getNumber(), 1);
-  } else {
-    auto err = eval("global.__evalError");
-    EXPECT_TRUE(err.isString());
+// Hermes gates eval() and the Function constructor behind
+// RuntimeConfig::EnableEval, but Runtime::evaluateJavaScript is not gated.
+// globalEvalWithSourceUrl goes through the latter, which is why the debug
+// bundle loaders prefer it over eval().
+class ReactInstanceWithoutEvalTest : public ReactInstanceTest {
+ protected:
+  ::hermes::vm::RuntimeConfig makeRuntimeConfig() override {
+    return ::hermes::vm::RuntimeConfig::Builder().withEnableEval(false).build();
   }
+};
+
+TEST_F(
+    ReactInstanceWithoutEvalTest,
+    testGlobalEvalWithSourceUrlWorksWhenEvalIsDisabled) {
+  initializeRuntimeWithScript("");
+
+  auto evalOutcome = eval(
+      "(function() { try { eval('1 + 2'); return 'no error'; } catch (e) { return String(e.message); } })()");
+  EXPECT_THAT(
+      evalOutcome.getString(*runtime_).utf8(*runtime_),
+      HasSubstr("Parsing source code unsupported"));
+
+  EXPECT_EQ(
+      eval("globalEvalWithSourceUrl('1 + 2', 'chunk.js')").getNumber(), 3);
 }
 
 TEST_F(ReactInstanceTest, testProfilingFlag) {

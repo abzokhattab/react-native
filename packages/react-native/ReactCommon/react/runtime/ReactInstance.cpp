@@ -458,8 +458,10 @@ void ReactInstance::initializeRuntime(
 
     defineReactInstanceFlags(runtime, options);
 
-    // Bridge JSIExecutor installs this so debug loaders can evaluate Metro JS
-    // via JSI. Hermes does not support JS eval() of Metro `__d(...)` source.
+    // Bridge JSIExecutor installs this so debug bundle loaders can evaluate
+    // fetched Metro source through Runtime::evaluateJavaScript, with a source
+    // URL for stack traces. Unlike JS eval(), that path is not disabled by
+    // Hermes' RuntimeConfig::EnableEval or by lean engine builds.
     defineReadOnlyGlobal(
         runtime,
         "globalEvalWithSourceUrl",

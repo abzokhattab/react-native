@@ -10,38 +10,71 @@
 
 import '@react-native/fantom/src/setUpDefaultReactNativeEnvironment';
 
+const SOURCE_URL = 'globalEvalWithSourceUrl-itest.bundle';
+
+function getHelper(): (code: string, sourceUrl?: string) => mixed {
+  // $FlowFixMe[prop-missing]
+  const helper = global.globalEvalWithSourceUrl;
+  if (typeof helper !== 'function') {
+    throw new Error(
+      `Expected global.globalEvalWithSourceUrl to be a function, got ${typeof helper}`,
+    );
+  }
+  return helper;
+}
+
+function getStack(fn: () => mixed): string {
+  try {
+    fn();
+  } catch (e) {
+    return String(e?.stack ?? '');
+  }
+  throw new Error('Expected the evaluated code to throw');
+}
+
 describe('globalEvalWithSourceUrl', () => {
+  afterEach(() => {
+    // $FlowFixMe[prop-missing]
+    delete globalThis.__fantomEvalMarker;
+  });
+
   it('is installed on the bridgeless runtime', () => {
     // $FlowFixMe[prop-missing]
     expect(typeof global.globalEvalWithSourceUrl).toBe('function');
   });
 
-  it('evaluates source via JSI, documenting how that differs from JS eval', () => {
-    // $FlowFixMe[prop-missing]
-    const helper = global.globalEvalWithSourceUrl;
-    expect(typeof helper).toBe('function');
-
-    // Same shape Metro serves for a lazy chunk (source, not bytecode).
+  it('evaluates the same source as JS eval() in the global scope', () => {
     const source = 'globalThis.__fantomEvalMarker = 17; 17';
 
-    let evalError: mixed = null;
-    try {
-      // eslint-disable-next-line no-eval
-      eval(source);
-    } catch (e) {
-      evalError = e;
-    }
-
-    const helperResult = helper(source, 'globalEvalWithSourceUrl-itest.bundle');
-
+    // eslint-disable-next-line no-eval
+    expect(eval(source)).toBe(17);
+    // $FlowFixMe[prop-missing]
     expect(globalThis.__fantomEvalMarker).toBe(17);
-    expect(helperResult).toBe(17);
 
-    if (evalError != null) {
-      // Lean Hermes: JS eval() is the unsupported path; the helper is JSI.
-      expect(String(evalError.message || evalError)).toMatch(
-        /Parsing source code unsupported|eval/i,
-      );
-    }
+    // $FlowFixMe[prop-missing]
+    delete globalThis.__fantomEvalMarker;
+
+    expect(getHelper()(source, SOURCE_URL)).toBe(17);
+    // $FlowFixMe[prop-missing]
+    expect(globalThis.__fantomEvalMarker).toBe(17);
+  });
+
+  it('attributes evaluated code to the given source URL, unlike eval()', () => {
+    const source = 'throw new Error("thrown from evaluated source")';
+
+    // eslint-disable-next-line no-eval
+    const evalStack = getStack(() => eval(source));
+    const helperStack = getStack(() => getHelper()(source, SOURCE_URL));
+
+    expect(evalStack).not.toContain(SOURCE_URL);
+    expect(helperStack).toContain(SOURCE_URL);
+  });
+
+  it('rejects an invalid argument count', () => {
+    const helper = getHelper();
+    // $FlowFixMe[incompatible-call]
+    expect(() => helper()).toThrow(
+      'globalEvalWithSourceUrl arg count must be 1 or 2',
+    );
   });
 });
