@@ -12,7 +12,7 @@ import '@react-native/fantom/src/setUpDefaultReactNativeEnvironment';
 
 const SOURCE_URL = 'globalEvalWithSourceUrl-itest.bundle';
 
-function getHelper(): (code: string, sourceUrl?: string) => mixed {
+function getHelper(): (code: string, sourceUrl?: string) => unknown {
   // $FlowFixMe[prop-missing]
   const helper = global.globalEvalWithSourceUrl;
   if (typeof helper !== 'function') {
@@ -23,7 +23,7 @@ function getHelper(): (code: string, sourceUrl?: string) => mixed {
   return helper;
 }
 
-function getStack(fn: () => mixed): string {
+function getStack(fn: () => unknown): string {
   try {
     fn();
   } catch (e) {
@@ -71,8 +71,11 @@ describe('globalEvalWithSourceUrl', () => {
   });
 
   it('rejects an invalid argument count', () => {
-    const helper = getHelper();
-    // $FlowFixMe[incompatible-call]
+    // Read it untyped on purpose: this test calls the host function with an
+    // arity the typed wrapper would not allow.
+    const helper: (...args: Array<unknown>) => unknown =
+      // $FlowFixMe[prop-missing]
+      global.globalEvalWithSourceUrl;
     expect(() => helper()).toThrow(
       'globalEvalWithSourceUrl arg count must be 1 or 2',
     );
